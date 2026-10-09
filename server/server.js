@@ -1,343 +1,330 @@
 const express = require("express");
+const http = require("http");
 const cors = require("cors");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
+const mongoose = require("mongoose");
 const crypto = require("crypto");
-const fs = require("fs");
 const path = require("path");
+const fs = require("fs");
+const multer = require("multer");
 
-require("dotenv").config();
+require("dotenv").config({
+  path: path.resolve(__dirname, "../.env")
+});
+
+const { connectDatabase } = require("./config/database");
+const Device = require("./models/Device");
+const Pairing = require("./models/Pairing");
+const Message = require("./models/Message");
+const SharedFile = require("./models/SharedFile");
+const PairingCode = require("./models/PairingCode");
+const { attachSocketServer } = require("./socket");
 
 const app = express();
+const server = http.createServer(app);
 
 const PORT = Number(process.env.PORT) || 3000;
 const NODE_ENV = process.env.NODE_ENV || "development";
-const DATA_DIR = path.join(__dirname, "data");
-const UPLOAD_DIR = path.join(DATA_DIR, "uploads");
-const DB_FILE = path.join(DATA_DIR, "swdh-data.json");
-const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25 MB
-const PAIR_CODE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
-// This is a starter backend using a local JSON file.
-// It is suitable for local development only; persistent production storage,
-// strong device authentication, and cloud file storage must be added before deployment.
+const CLIENT_ORIGINS = process.env.CLIENT_ORIGIN
+  ? process.env.CLIENT_ORIGIN.split(",").map(origin => origin.trim())
+  : true;
+
+const MAX_FILE_SIZE = 25 * 1024 * 1024;
+const PAIRING_CODE_TTL_MS = 10 * 60 * 1000;
+
+const UPLOAD_DIR = path.join(__dirname, "uploads");
+
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 app.disable("x-powered-by");
-app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
+
+app.use(
+  helmet({
+    crossOriginResourcePolicy: {
+      policy: "cross-origin"
+    }
+  })
+);
+
 app.use(cors({
-  origin: process.env.CLIENT_ORIGIN
-    ? process.env.CLIENT_ORIGIN.split(",").map((item) => item.trim())
-    : true,
+  origin: CLIENT_ORIGINS,
   methods: ["GET", "POST", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "X-Device-Id"]
 }));
-app.use(express.json({ limit: "1mb" }));
-app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
-const apiLimiter = rateLimit({
+app.use(express.json({ limit: "1mb" }));
+
+app.use(rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 300,
   standardHeaders: "draft-7",
-  legacyHeaders: false,
-  message: { error: "Too many requests. Please try again later." }
-});
-app.use(apiLimiter);
+  legacyHeaders: false
+}));
 
-function readStore() {
-  try {
-    if (!fs.existsSync(DB_FILE)) {
-      return { devices: [], pairingCodes: [], pairings: [], messages: [], files: [] };
-    }
-    const parsed = JSON.parse(fs.readFileSync(DB_FILE, "utf8"));
-    return {
-      devices: Array.isArray(parsed.devices) ? parsed.devices : [],
-      pairingCodes: Array.isArray(parsed.pairingCodes) ? parsed.pairingCodes : [],
-      pairings: Array.isArray(parsed.pairings) ? parsed.pairings : [],
-      messages: Array.isArray(parsed.messages) ? parsed.messages : [],
-      files: Array.isArray(parsed.files) ? parsed.files : []
-    };
-  } catch (error) {
-    console.error("Could not read local data store:", error.message);
-    throw new Error("Data store is unreadable. Back up and repair server/data/swdh-data.json.");
-  }
+function deviceIdFrom(req) {
+  return String(
+    req.get("X-Device-Id") ||
+    req.body?.deviceId ||
+    req.query?.deviceId ||
+    ""
+  ).trim().slice(0, 160);
 }
 
-let store = readStore();
-let writeQueue = Promise.resolve();
-
-function saveStore() {
-  const snapshot = JSON.stringify(store, null, 2);
-  writeQueue = writeQueue.then(async () => {
-    const tempFile = `${DB_FILE}.tmp`;
-    await fs.promises.writeFile(tempFile, snapshot, "utf8");
-    await fs.promises.rename(tempFile, DB_FILE);
-  });
-  return writeQueue;
-}
-
-function cleanString(value, maxLength = 100) {
-  return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
-}
-
-function getDeviceId(req) {
-  return cleanString(req.get("X-Device-Id") || req.body?.deviceId || req.query?.deviceId, 160);
-}
-
-function findDevice(deviceId) {
-  return store.devices.find((device) => device.deviceId === deviceId);
-}
-
-function requireRegisteredDevice(req, res, next) {
-  const deviceId = getDeviceId(req);
-  if (!deviceId || !findDevice(deviceId)) {
-    return res.status(401).json({ error: "Device not registered. Register this device first." });
-  }
-  req.deviceId = deviceId;
-  next();
-}
-
-function publicDevice(device) {
+function safeDevice(device) {
   return {
     deviceId: device.deviceId,
     deviceName: device.deviceName,
+    platform: device.platform,
     createdAt: device.createdAt,
     lastSeenAt: device.lastSeenAt
   };
 }
 
-function isPaired(deviceA, deviceB) {
-  return store.pairings.some((pairing) =>
-    (pairing.deviceA === deviceA && pairing.deviceB === deviceB) ||
-    (pairing.deviceA === deviceB && pairing.deviceB === deviceA)
-  );
+async function requireDevice(req, res, next) {
+  try {
+    const deviceId = deviceIdFrom(req);
+
+    if (!deviceId) {
+      return res.status(401).json({
+        message: "Register this device first."
+      });
+    }
+
+    const device = await Device.findOne({ deviceId });
+
+    if (!device) {
+      return res.status(401).json({
+        message: "Device is not registered."
+      });
+    }
+
+    req.deviceId = deviceId;
+    req.device = device;
+
+    Device.updateOne(
+      { _id: device._id },
+      { $set: { lastSeenAt: new Date() } }
+    ).catch(() => {});
+
+    next();
+  } catch (error) {
+    next(error);
+  }
 }
 
-function pruneExpiredCodes() {
-  const now = Date.now();
-  store.pairingCodes = store.pairingCodes.filter((item) => item.expiresAt > now);
+async function pairedWith(deviceA, deviceB) {
+  if (!deviceA || !deviceB) {
+    return false;
+  }
+
+  return Boolean(await Pairing.findOne({
+    status: "active",
+    $or: [
+      { deviceA, deviceB },
+      { deviceA: deviceB, deviceB: deviceA }
+    ]
+  }));
+}
+
+function hashCode(code) {
+  return crypto
+    .createHash("sha256")
+    .update(code)
+    .digest("hex");
 }
 
 function asyncRoute(handler) {
-  return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
+  return (req, res, next) =>
+    Promise.resolve(handler(req, res, next)).catch(next);
 }
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, callback) => {
+      callback(null, UPLOAD_DIR);
+    },
+
+    filename: (_req, file, callback) => {
+      const ext = path.extname(file.originalname)
+        .slice(0, 12)
+        .replace(/[^.\w-]/g, "");
+
+      callback(null, `${crypto.randomUUID()}${ext}`);
+    }
+  }),
+
+  limits: {
+    fileSize: MAX_FILE_SIZE,
+    files: 10
+  }
+});
 
 app.get("/", (_req, res) => {
   res.json({
     name: "Swdh API",
-    status: "running",
-    environment: NODE_ENV,
-    note: "Local-development starter. Device IDs are not secure authentication."
+    status: "running"
   });
 });
 
 app.get("/health", (_req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
-});
-
-// Register a browser/device for this prototype.
-// IMPORTANT: a client-supplied deviceId is not proof of identity.
-app.post("/register", asyncRoute(async (req, res) => {
-  const deviceName = cleanString(req.body?.deviceName, 60);
-  let deviceId = cleanString(req.body?.deviceId, 160);
-
-  if (!deviceName) {
-    return res.status(400).json({ error: "Please provide a device name." });
-  }
-
-  if (!deviceId) deviceId = crypto.randomUUID();
-
-  let device = findDevice(deviceId);
-  const now = new Date().toISOString();
-
-  if (device) {
-    device.deviceName = deviceName;
-    device.lastSeenAt = now;
-  } else {
-    device = { deviceId, deviceName, createdAt: now, lastSeenAt: now };
-    store.devices.push(device);
-  }
-
-  await saveStore();
-  res.status(200).json({ message: "Device registered.", device: publicDevice(device) });
-}));
-
-app.get("/devices", requireRegisteredDevice, (req, res) => {
-  const pairedIds = new Set();
-  for (const pairing of store.pairings) {
-    if (pairing.deviceA === req.deviceId) pairedIds.add(pairing.deviceB);
-    if (pairing.deviceB === req.deviceId) pairedIds.add(pairing.deviceA);
-  }
-  const devices = [...pairedIds]
-    .map((id) => findDevice(id))
-    .filter(Boolean)
-    .map(publicDevice);
-  res.json({ devices });
-});
-
-// Create a short-lived one-time pairing code.
-app.post("/pairing/code", requireRegisteredDevice, asyncRoute(async (req, res) => {
-  pruneExpiredCodes();
-  store.pairingCodes = store.pairingCodes.filter((item) => item.deviceId !== req.deviceId);
-  const code = String(crypto.randomInt(0, 1000000)).padStart(6, "0");
-  const now = Date.now();
-  store.pairingCodes.push({
-    code,
-    deviceId: req.deviceId,
-    createdAt: now,
-    expiresAt: now + PAIR_CODE_TTL_MS
+  res.json({
+    status:
+      mongoose.connection.readyState === 1
+        ? "ok"
+        : "database-disconnected"
   });
-  await saveStore();
-  res.json({ code, expiresInSeconds: PAIR_CODE_TTL_MS / 1000 });
-}));
+});
 
-app.post("/pairing/verify", requireRegisteredDevice, asyncRoute(async (req, res) => {
-  pruneExpiredCodes();
-  const code = cleanString(req.body?.code, 10);
-  if (!/^\d{6}$/.test(code)) {
-    return res.status(400).json({ error: "Enter a valid 6-digit pairing code." });
-  }
+app.post("/register", asyncRoute(async (req, res) => {
+  const deviceName = String(
+    req.body?.deviceName || ""
+  ).trim().slice(0, 60);
 
-  const codeIndex = store.pairingCodes.findIndex((item) =>
-    item.code === code && item.deviceId !== req.deviceId && item.expiresAt > Date.now()
-  );
-  if (codeIndex < 0) {
-    return res.status(404).json({ error: "Code is invalid, expired, or belongs to this device." });
-  }
+  const deviceId = String(
+    req.body?.deviceId || crypto.randomUUID()
+  ).trim().slice(0, 160);
 
-  const [pairingCode] = store.pairingCodes.splice(codeIndex, 1);
-  if (!isPaired(req.deviceId, pairingCode.deviceId)) {
-    store.pairings.push({
-      deviceA: req.deviceId,
-      deviceB: pairingCode.deviceId,
-      createdAt: new Date().toISOString()
+  if (!deviceName || !deviceId) {
+    return res.status(400).json({
+      message: "Device name and ID are required."
     });
   }
-  await saveStore();
+
+  const device = await Device.findOneAndUpdate(
+    { deviceId },
+    {
+      $set: {
+        deviceName,
+        lastSeenAt: new Date()
+      },
+      $setOnInsert: {
+        deviceId,
+        platform: "web"
+      }
+    },
+    {
+      new: true,
+      upsert: true,
+      runValidators: true,
+      setDefaultsOnInsert: true
+    }
+  );
 
   res.json({
-    message: "Devices paired successfully.",
-    device: publicDevice(findDevice(pairingCode.deviceId))
+    message: "Device registered.",
+    device: safeDevice(device)
   });
 }));
 
-app.get("/messages", requireRegisteredDevice, (req, res) => {
-  const otherDeviceId = cleanString(req.query?.deviceId, 160);
-  if (!otherDeviceId || !isPaired(req.deviceId, otherDeviceId)) {
-    return res.status(403).json({ error: "Pair with this device before viewing messages." });
-  }
-  const messages = store.messages.filter((message) =>
-    (message.fromDeviceId === req.deviceId && message.toDeviceId === otherDeviceId) ||
-    (message.fromDeviceId === otherDeviceId && message.toDeviceId === req.deviceId)
+app.get("/devices", requireDevice, asyncRoute(async (req, res) => {
+  const pairs = await Pairing.find({
+    status: "active",
+    $or: [
+      { deviceA: req.deviceId },
+      { deviceB: req.deviceId }
+    ]
+  }).lean();
+
+  const ids = [
+    ...new Set(
+      pairs.map(p =>
+        p.deviceA === req.deviceId
+          ? p.deviceB
+          : p.deviceA
+      )
+    )
+  ];
+
+  const devices = await Device.find({
+    deviceId: { $in: ids }
+  }).lean();
+
+  res.json({
+    devices: devices.map(safeDevice)
+  });
+}));
+
+app.post("/pairing/code", requireDevice, asyncRoute(async (req, res) => {
+  await PairingCode.deleteMany({
+    deviceId: req.deviceId
+  });
+
+  const code = String(
+    crypto.randomInt(0, 1000000)
+  ).padStart(6, "0");
+
+  const expiresAt = new Date(
+    Date.now() + PAIRING_CODE_TTL_MS
   );
-  res.json({ messages });
-});
 
-app.post("/messages", requireRegisteredDevice, asyncRoute(async (req, res) => {
-  const toDeviceId = cleanString(req.body?.toDeviceId, 160);
-  const text = cleanString(req.body?.text, 5000);
-  if (!toDeviceId || !text) {
-    return res.status(400).json({ error: "Recipient and message text are required." });
-  }
-  if (!findDevice(toDeviceId) || !isPaired(req.deviceId, toDeviceId)) {
-    return res.status(403).json({ error: "Pair with the recipient device first." });
-  }
-
-  const message = {
-    id: crypto.randomUUID(),
-    fromDeviceId: req.deviceId,
-    toDeviceId,
-    text,
-    createdAt: new Date().toISOString()
-  };
-  store.messages.push(message);
-  await saveStore();
-  res.status(201).json({ message });
-}));
-
-// Prototype upload endpoint. Files are stored on the local filesystem, not cloud storage.
-const multer = require("multer");
-const storage = multer.diskStorage({
-  destination: (_req, _file, callback) => callback(null, UPLOAD_DIR),
-  filename: (_req, file, callback) => {
-    const safeExtension = path.extname(file.originalname).slice(0, 12).replace(/[^.\w-]/g, "");
-    callback(null, `${crypto.randomUUID()}${safeExtension}`);
-  }
-});
-const upload = multer({
-  storage,
-  limits: { fileSize: MAX_FILE_SIZE, files: 1 }
-});
-
-app.get("/files", requireRegisteredDevice, (req, res) => {
-  const otherDeviceId = cleanString(req.query?.deviceId, 160);
-  if (!otherDeviceId || !isPaired(req.deviceId, otherDeviceId)) {
-    return res.status(403).json({ error: "Pair with this device before viewing files." });
-  }
-  const files = store.files.filter((file) =>
-    (file.fromDeviceId === req.deviceId && file.toDeviceId === otherDeviceId) ||
-    (file.fromDeviceId === otherDeviceId && file.toDeviceId === req.deviceId)
-  ).map(({ diskName, ...safeFile }) => safeFile);
-  res.json({ files });
-});
-
-app.post("/files", requireRegisteredDevice, upload.single("file"), asyncRoute(async (req, res) => {
-  const toDeviceId = cleanString(req.body?.toDeviceId, 160);
-  if (!req.file) return res.status(400).json({ error: "Select a file to upload." });
-  if (!toDeviceId || !findDevice(toDeviceId) || !isPaired(req.deviceId, toDeviceId)) {
-    await fs.promises.unlink(req.file.path).catch(() => {});
-    return res.status(403).json({ error: "Pair with the recipient device first." });
-  }
-
-  const file = {
-    id: crypto.randomUUID(),
-    fromDeviceId: req.deviceId,
-    toDeviceId,
-    originalName: path.basename(req.file.originalname).slice(0, 255),
-    diskName: req.file.filename,
-    mimeType: req.file.mimetype,
-    size: req.file.size,
-    createdAt: new Date().toISOString()
-  };
-  store.files.push(file);
-  await saveStore();
-  const { diskName, ...safeFile } = file;
-  res.status(201).json({ file: safeFile });
-}));
-
-app.get("/files/:id/download", requireRegisteredDevice, asyncRoute(async (req, res) => {
-  const file = store.files.find((item) => item.id === req.params.id);
-  if (!file || (file.fromDeviceId !== req.deviceId && file.toDeviceId !== req.deviceId)) {
-    return res.status(404).json({ error: "File not found." });
-  }
-  const filePath = path.join(UPLOAD_DIR, path.basename(file.diskName));
-  if (!fs.existsSync(filePath)) return res.status(404).json({ error: "Stored file is missing." });
-  res.download(filePath, file.originalName);
-}));
-
-// Remove old pairing codes and orphaned expired uploads at startup and periodically.
-function cleanupExpiredCodes() {
-  pruneExpiredCodes();
-  saveStore().catch((error) => console.error("Could not save cleanup:", error.message));
-}
-cleanupExpiredCodes();
-const cleanupTimer = setInterval(cleanupExpiredCodes, 60 * 1000);
-cleanupTimer.unref();
-
-app.use((err, _req, res, _next) => {
-  console.error(err);
-  if (err && err.code === "LIMIT_FILE_SIZE") {
-    return res.status(413).json({ error: "File is too large. Maximum size is 25 MB." });
-  }
-  if (err && err.code === "LIMIT_FILE_COUNT") {
-    return res.status(400).json({ error: "Upload one file at a time." });
-  }
-  res.status(500).json({
-    error: NODE_ENV === "production" ? "Internal server error." : (err.message || "Internal server error.")
+  await PairingCode.create({
+    codeHash: hashCode(code),
+    deviceId: req.deviceId,
+    expiresAt
   });
-});
 
-app.listen(PORT, () => {
-  console.log(`Swdh server running on port ${PORT}`);
-  console.log(`Environment: ${NODE_ENV}`);
-});
+  res.json({
+    code,
+    expiresInSeconds: PAIRING_CODE_TTL_MS / 1000
+  });
+}));
+
+app.post("/pairing/verify", requireDevice, asyncRoute(async (req, res) => {
+  const code = String(
+    req.body?.code || ""
+  ).trim();
+
+  if (!/^\d{6}$/.test(code)) {
+    return res.status(400).json({
+      message: "Enter a valid 6-digit code."
+    });
+  }
+
+  const record = await PairingCode.findOneAndDelete({
+    codeHash: hashCode(code),
+    deviceId: { $ne: req.deviceId },
+    expiresAt: { $gt: new Date() },
+    usedAt: null
+  });
+
+  if (!record) {
+    return res.status(404).json({
+      message: "Code is invalid, expired, or already used."
+    });
+  }
+
+  const existing = await Pairing.findOne({
+    $or: [
+      {
+        deviceA: req.deviceId,
+        deviceB: record.deviceId
+      },
+      {
+        deviceA: record.deviceId,
+        deviceB: req.deviceId
+      }
+    ]
+  });
+
+  if (!existing) {
+    await Pairing.create({
+      deviceA: req.deviceId,
+      deviceB: record.deviceId,
+      status: "active"
+    });
+  } else if (existing.status !== "active") {
+    existing.status = "active";
+    await existing.save();
+  }
+
+  const device = await Device.findOne({
+    deviceId: record.deviceId
+  });
+
+  res.json({
+    message: "Device paired successfully.",
+    device: device ? safeDevice(device) : null
+  });
+}));
