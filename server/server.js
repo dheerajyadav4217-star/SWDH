@@ -139,15 +139,13 @@ app.get("/script.js", (_req, res) => {
 });
 
 // Keep a separate health endpoint for checking the API.
-app.get("/api", (_req, res) => {
-  res.json({
-    name: "Swdh API",
-    status: "running",
-    environment: NODE_ENV,
-    note: "Device IDs are not secure authentication."
-  });
+const FRONTENT_DIR = path.resolve(__dirname, "..");
+app.use(express.static(FRONTENT_DIR,{
+  index: false
+}));
+app.get("/",(req,res) => {
+  res.sendFile(path.join(FRONTEND_DIR,"index.html"));
 });
-
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
