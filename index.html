@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <meta
+        name="description"
+        content="Linkless — Connect your devices, share messages and transfer files securely."
+    >
+    <meta name="theme-color" content="#f5f1e9">
+
+    <title>Swdh — Connect. Share. Simple.</title>
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <!-- ================= HEADER ================= -->
+
+    <header class="app-header">
+        <a href="#" class="logo" id="logoLink" aria-label="Swdh home">
+            Swdh
+        </a>
+
+        <nav class="header-nav" aria-label="Main navigation">
+            <button
+                type="button"
+                class="nav-link"
+                id="aboutBtn"
+            >
+                About
+            </button>
+
+            <button
+                type="button"
+                class="nav-link"
+                id="helpBtn"
+            >
+                Help
+            </button>
+
+            <button
+                type="button"
+                class="icon-button"
+                id="profileBtn"
+                aria-label="Device profile"
+                title="Device profile"
+                hidden
+            >
+                ●
+            </button>
+        </nav>
+    </header>
+
+
+    <!-- ================= MAIN APPLICATION ================= -->
+
+    <main id="appMain">
+
+        <!-- ================= SETUP SCREEN ================= -->
+
+        <section
+            class="hero"
+            id="setupScreen"
+            aria-labelledby="setupTitle"
+        >
+            <div class="content" id="setupContent">
+
+                <p class="eyebrow">YOUR DEVICES, CONNECTED</p>
+
+                <h1 id="setupTitle">
+                    Connect. Share. Simple.
+                </h1>
+
+                <p class="hero-description">
+                    Connect your devices and share messages and files
+                    without exchanging contact details.
+                </p>
+
+                <form id="setupForm">
+
+                    <label for="deviceName" class="visually-hidden">
+                        Device name
+                    </label>
+
+                    <input
+                        type="text"
+                        id="deviceName"
+                        name="deviceName"
+                        placeholder="Enter your device name"
+                        maxlength="40"
+                        autocomplete="nickname"
+                        required
+                    >
+
+                    <button
+                        type="submit"
+                        id="continueBtn"
+                        class="primary-button"
+                    >
+                        Continue
+                    </button>
+
+                </form>
+
+                <p class="form-message" id="setupMessage" role="status"></p>
+
+                <small class="tagline">
+                    Your Device, Your Control.
+                </small>
+
+            </div>
+        </section>
+
+
+        <!-- ================= DASHBOARD ================= -->
+
+        <section
+            class="dashboard"
+            id="dashboard"
+            aria-labelledby="dashboardTitle"
+            hidden
+        >
+
+            <div class="dashboard-header">
+
+                <div>
+                    <p class="eyebrow">YOUR PERSONAL SPACE</p>
+
+                    <h1 id="dashboardTitle">
+                        Your Devices
+                    </h1>
+
+                    <p id="welcomeMessage">
+                        Manage your connected devices.
+                    </p>
+                </div>
+
+                <button
+                    type="button"
+                    id="newPairingBtn"
+                    class="primary-button"
+                >
+                    + Pair Device
+                </button>
+
+            </div>
+
+
+            <!-- DEVICE STATUS -->
+
+            <div
+                class="connection-status"
+                id="connectionStatus"
+                role="status"
+            >
+                <span class="status-indicator" aria-hidden="true"></span>
+                <span id="connectionStatusText">
+                    Connecting to server...
+                </span>
+            </div>
+
+
+            <!-- DEVICE LIST -->
+
+            <section
+                class="panel devices-panel"
+                aria-labelledby="devicesTitle"
+            >
+
+                <div class="panel-header">
+                    <h2 id="devicesTitle">Paired Devices</h2>
+
+                    <button
+                        type="button"
+                        class="text-button"
+                        id="refreshDevicesBtn"
+                    >
+                        Refresh
+                    </button>
+                </div>
+
+                <div id="devicesList" class="devices-list">
+
+                    <div class="empty-state" id="emptyDevicesState">
+                        <div class="empty-icon" aria-hidden="true">⌁</div>
+
+                        <h3>No paired devices yet</h3>
+
+                        <p>
+                            Pair another device to start sharing.
+                        </p>
+
+                        <button
+                            type="button"
+                            id="emptyPairDeviceBtn"
+                            class="secondary-button"
+                        >
+                            Pair your first device
+                        </button>
+                    </div>
+
+                </div>
+
+            </section>
+
+
+            <!-- ================= COMMUNICATION AREA ================= -->
+
+            <section
+                class="panel communication-panel"
+                id="communicationPanel"
+                aria-labelledby="communicationTitle"
+            >
+
+                <div class="panel-header">
+                    <div>
+                        <h2 id="communicationTitle">Messages</h2>
+
+                        <p id="activeDeviceLabel">
+                            Select a paired device to begin.
+                        </p>
+                    </div>
+
+                    <span id="chatStatus" class="chat-status">
+                        Not connected
+                    </span>
+                </div>
+
+
+                <!-- MESSAGE HISTORY -->
+
+                <div
+                    id="messageList"
+                    class="message-list"
+                    role="log"
+                    aria-live="polite"
+                    aria-relevant="additions"
+                    aria-label="Conversation messages"
+                >
+
+                    <div class="empty-state" id="emptyMessagesState">
+                        <p>Your conversation will appear here.</p>
+                    </div>
+
+                </div>
+
+
+                <!-- MESSAGE COMPOSER -->
+
+                <form id="messageForm" class="message-form">
+
+                    <label for="messageInput" class="visually-hidden">
+                        Write a message
+                    </label>
+
+                    <textarea
+                        id="messageInput"
+                        name="message"
+                        placeholder="Write a message..."
+                        rows="2"
+                        maxlength="5000"
+                        disabled
+                    ></textarea>
+
+                    <button
+                        type="submit"
+                        id="sendMessageBtn"
+                        class="primary-button"
+                        disabled
+                    >
+                        Send
+                    </button>
+
+                </form>
+
+            </section>
+
+
+            <!-- ================= FILE SHARING ================= -->
+
+            <section
+                class="panel file-panel"
+                aria-labelledby="filesTitle"
+            >
+
+                <div class="panel-header">
+                    <div>
+                        <h2 id="filesTitle">File Sharing</h2>
+
+                        <p>
+                            Share files with your paired devices.
+                        </p>
+                    </div>
+                </div>
+
+
+                <form id="fileUploadForm">
+
+                    <label
+                        for="fileInput"
+                        class="file-drop-area"
+                        id="fileDropArea"
+                    >
+                        <span class="file-icon" aria-hidden="true">↑</span>
+
+                        <strong>Select files to share</strong>
+
+                        <span>
+                            Choose files from your device.
+                        </span>
+
+                        <input
+                            type="file"
+                            id="fileInput"
+                            name="files"
+                            multiple
+                        >
+                    </label>
+
+
+                    <div
+                        id="selectedFiles"
+                        class="selected-files"
+                        aria-live="polite"
+                    ></div>
+
+
+                    <div class="file-actions">
+
+                        <button
+                            type="submit"
+                            id="uploadFilesBtn"
+                            class="primary-button"
+                            disabled
+                        >
+                            Share Files
+                        </button>
+
+                        <button
+                            type="button"
+                            id="clearFilesBtn"
+                            class="secondary-button"
+                        >
+                            Clear Selection
+                        </button>
+
+                    </div>
+
+                </form>
+
+
+                <!-- SHARED FILES -->
+
+                <div class="shared-files-section">
+
+                    <h3>Shared Files</h3>
+
+                    <div
+                        id="sharedFilesList"
+                        class="shared-files-list"
+                    >
+                        <p class="muted-text">
+                            Shared files will appear here.
+                        </p>
+                    </div>
+
+                </div>
+
+            </section>
+
+        </section>
+
+    </main>
+
+
+    <!-- ================= PAIRING MODAL ================= -->
+
+    <dialog
+        class="app-modal"
+        id="pairingModal"
+        aria-labelledby="pairingModalTitle"
+    >
+
+        <div class="modal-header">
+
+            <div>
+                <p class="eyebrow">DEVICE CONNECTION</p>
+
+                <h2 id="pairingModalTitle">
+                    Pair a Device
+                </h2>
+            </div>
+
+            <button
+                type="button"
+                class="icon-button modal-close"
+                data-close-modal="pairingModal"
+                aria-label="Close pairing dialog"
+            >
+                ×
+            </button>
+
+        </div>
+
+
+        <div class="pairing-tabs" role="tablist" aria-label="Pairing options">
+
+            <button
+                type="button"
+                id="generateCodeTab"
+                class="tab-button active"
+                role="tab"
+                aria-selected="true"
+                aria-controls="generateCodePanel"
+            >
+                Generate Code
+            </button>
+
+            <button
+                type="button"
+                id="enterCodeTab"
+                class="tab-button"
+                role="tab"
+                aria-selected="false"
+                aria-controls="enterCodePanel"
+            >
+                Enter Code
+            </button>
+
+        </div>
+
+
+        <!-- GENERATE CODE -->
+
+        <section
+            id="generateCodePanel"
+            class="pairing-panel"
+            role="tabpanel"
+            aria-labelledby="generateCodeTab"
+        >
+
+            <p>
+                Generate a temporary code to pair another device.
+            </p>
+
+            <button
+                type="button"
+                id="generatePairingCodeBtn"
+                class="primary-button full-width"
+            >
+                Generate Pairing Code
+            </button>
+
+
+            <div id="generatedCodeContainer" hidden>
+
+                <p class="code-label">Your pairing code</p>
+
+                <div class="pairing-code-display">
+
+                    <output
+                        id="generatedPairingCode"
+                        class="pairing-code"
+                        aria-live="polite"
+                    >
+                        ------
+                    </output>
+
+                    <button
+                        type="button"
+                        id="copyPairingCodeBtn"
+                        class="secondary-button"
+                    >
+                        Copy
+                    </button>
+
+                </div>
+
+                <p class="expiry-text">
+                    Expires in
+                    <span id="pairingExpiry">--:--</span>
+                </p>
+
+                <p id="pairingCodeMessage" role="status"></p>
+
+            </div>
+
+        </section>
+
+
+        <!-- ENTER CODE -->
+
+        <section
+            id="enterCodePanel"
+            class="pairing-panel"
+            role="tabpanel"
+            aria-labelledby="enterCodeTab"
+            hidden
+        >
+
+            <p>
+                Enter the temporary code displayed on the other device.
+            </p>
+
+            <form id="enterPairingCodeForm">
+
+                <label for="pairingCodeInput">
+                    Pairing code
+                </label>
+
+                <input
+                    type="text"
+                    id="pairingCodeInput"
+                    name="pairingCode"
+                    placeholder="Enter pairing code"
+                    maxlength="12"
+                    autocomplete="off"
+                    required
+                >
+
+                <button
+                    type="submit"
+                    id="confirmPairingBtn"
+                    class="primary-button full-width"
+                >
+                    Verify & Pair
+                </button>
+
+            </form>
+
+            <p id="enterPairingMessage" role="status"></p>
+
+        </section>
+
+    </dialog>
+
+
+    <!-- ================= DEVICE PROFILE MODAL ================= -->
+
+    <dialog
+        class="app-modal"
+        id="profileModal"
+        aria-labelledby="profileModalTitle"
+    >
+
+        <div class="modal-header">
+
+            <h2 id="profileModalTitle">Device Profile</h2>
+
+            <button
+                type="button"
+                class="icon-button modal-close"
+                data-close-modal="profileModal"
+                aria-label="Close profile dialog"
+            >
+                ×
+            </button>
+
+        </div>
+
+        <div class="profile-details">
+
+            <p>
+                <strong>Device name</strong>
+                <span id="profileDeviceName">—</span>
+            </p>
+
+            <p>
+                <strong>Device ID</strong>
+                <code id="profileDeviceId">Not registered</code>
+            </p>
+
+        </div>
+
+        <form id="renameDeviceForm">
+
+            <label for="renameDeviceInput">
+                Change display name
+            </label>
+
+            <input
+                type="text"
+                id="renameDeviceInput"
+                maxlength="40"
+                placeholder="New device name"
+            >
+
+            <button
+                type="submit"
+                id="saveDeviceNameBtn"
+                class="primary-button full-width"
+            >
+                Save Name
+            </button>
+
+        </form>
+
+        <button
+            type="button"
+            id="logoutBtn"
+            class="danger-button full-width"
+        >
+            Disconnect This Device
+        </button>
+
+        <p id="profileMessage" role="status"></p>
+
+    </dialog>
+
+
+    <!-- ================= ABOUT MODAL ================= -->
+
+    <dialog
+        class="app-modal"
+        id="aboutModal"
+        aria-labelledby="aboutModalTitle"
+    >
+
+        <div class="modal-header">
+
+            <h2 id="aboutModalTitle">About Swdh</h2>
+
+            <button
+                type="button"
+                class="icon-button modal-close"
+                data-close-modal="aboutModal"
+                aria-label="Close about dialog"
+            >
+                ×
+            </button>
+
+        </div>
+
+        <p>
+            Swdh is designed to connect your devices and make sharing
+            messages and files simple.
+        </p>
+
+        <p>
+            Our goal is to make paired-device communication convenient
+            without repeatedly exchanging contact details.
+        </p>
+
+    </dialog>
+
+
+    <!-- ================= HELP MODAL ================= -->
+
+    <dialog
+        class="app-modal"
+        id="helpModal"
+        aria-labelledby="helpModalTitle"
+    >
+
+        <div class="modal-header">
+
+            <h2 id="helpModalTitle">Help</h2>
+
+            <button
+                type="button"
+                class="icon-button modal-close"
+                data-close-modal="helpModal"
+                aria-label="Close help dialog"
+            >
+                ×
+            </button>
+
+        </div>
+
+        <ol class="help-list">
+
+            <li>Register your device with a display name.</li>
+
+            <li>Generate a pairing code on one device.</li>
+
+            <li>Enter that code on the other device.</li>
+
+            <li>After pairing, select the device to communicate.</li>
+
+            <li>Use Messages or File Sharing to exchange data.</li>
+
+        </ol>
+
+        <p class="muted-text">
+            Pairing and sharing require the backend services to be
+            configured and running.
+        </p>
+
+    </dialog>
+
+
+    <!-- ================= GLOBAL NOTIFICATIONS ================= -->
+
+    <div
+        id="toastContainer"
+        class="toast-container"
+        aria-live="polite"
+        aria-atomic="true"
+    ></div>
+
+
+    <!-- ================= FOOTER ================= -->
+
+    <footer class="app-footer">
+
+        <p>
+            Swdh · Your Device, Your Control.
+        </p>
+
+    </footer>
+
+
+    <!-- ================= JAVASCRIPT ================= -->
+
+    <script src="script.js" defer></script>
+
+</body>
+</html>

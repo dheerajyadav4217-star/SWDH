@@ -1,0 +1,21 @@
+# Node project
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Environment secrets
+.env
+.env.*
+!.env.example
+
+# Local uploads and runtime data
+server/uploads/
+server/data/
+*.tmp
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
