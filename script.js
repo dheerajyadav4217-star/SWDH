@@ -10,11 +10,12 @@
 "use strict";
 
 (() => {
-    const API_BASE = window.SWDH_API_BASE || "http://localhost:3000";
-    const STORAGE_KEYS = {
-        deviceId: "deviceId",
-        deviceName: "deviceName"
-    };
+    const API_BASE = window.SWDH_API_BASE || window.location.origin;
+
+const STORAGE_KEYS = {
+    deviceId: "deviceId",
+    deviceName: "deviceName"
+};
 
     const $ = (selector) => document.querySelector(selector);
 
