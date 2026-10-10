@@ -10,7 +10,7 @@
 "use strict";
 
 (() => {
-    const API_BASE = window.SWDH_API_BASE || "http://localhost:3000";
+    const API_BASE = window.SWDH_API_BASE || window.location.origin;
     const STORAGE_KEYS = {
         deviceId: "deviceId",
         deviceName: "deviceName"
