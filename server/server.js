@@ -6,6 +6,7 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const multer = require("multer");
+const { version } = require("os");
 
 require("dotenv").config();
 
@@ -73,7 +74,13 @@ app.get("/", (_req, res) => {
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
-
+app.get("/debug-vesion",(_req, res) => {
+  res.json({
+    version: "SWDH-FRONTENT-FIX-10-10",
+    frontend: FRONTEND_DIR,
+    homepage: "index.html"
+  });
+});
 // Local JSON data store. This prototype does not provide persistent cloud storage.
 function readStore() {
   try {
