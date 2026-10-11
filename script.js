@@ -141,7 +141,7 @@
 
         if (!response.ok) {
             const message = result && typeof result === "object" ? result.error || result.message || JSON.stringify(result) : result || `Request failed (${response.status})`;
-            throw new Error('HTTP $ {response.status}: ${message}');}
+            throw new Error(`HTTP $ {response.status}: ${message}`);}
                 
 
         return result;
@@ -430,7 +430,7 @@
         } catch (error) {
             showMessage(
                 elements.enterPairingMessage,
-                `${error.message} Pairing API backend mein implement hona zaroori hai.`,
+                error.messages,
                 "error"
             );
         } finally {
