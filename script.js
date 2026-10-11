@@ -140,7 +140,7 @@
             : await response.text();
 
         if (!response.ok) {
-            const message = result && typeof result === "object" ? result.error || result.message || JSON.stringify(result) : result || 'Request failed (${response.status})';
+            const message = result && typeof result === "object" ? result.error || result.message || JSON.stringify(result) : result || `Request failed (${response.status})`;
             throw new Error('HTTP $ {response.status}: ${message}');}
                 
 
